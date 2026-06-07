@@ -21,25 +21,27 @@ use serde::{
 pub mod gerrit;
 
 struct Config {
-   circus_url:   String,
-   circus_key:   String,
-   gerrit_query: String,
-   poll_int:     u64,
-   poll_max:     u64,
+   circus_url:      String,
+   circus_key:      String,
+   gerrit_query:    String,
+   recheck_hashtag: String,
+   poll_int:        u64,
+   poll_max:        u64,
 }
 
 impl Config {
    fn from_env() -> Result<Self> {
       Ok(Self {
-         circus_url:   std::env::var("CIRCUS_URL").context("CIRCUS_URL must be set")?,
-         circus_key:   std::env::var("CIRCUS_API_KEY").context("CIRCUS_API_KEY must be set")?,
-         gerrit_query: std::env::var("GERRIT_CHANGE_QUERY")
+         circus_url:      std::env::var("CIRCUS_URL").context("CIRCUS_URL must be set")?,
+         circus_key:      std::env::var("CIRCUS_API_KEY").context("CIRCUS_API_KEY must be set")?,
+         gerrit_query:    std::env::var("GERRIT_CHANGE_QUERY")
             .unwrap_or_else(|_| "status:open+-is:wip".into()),
-         poll_int:     std::env::var("POLL_INTERVAL")
+         recheck_hashtag: std::env::var("RECHECK_HASHTAG").unwrap_or_else(|_| "ci-recheck".into()),
+         poll_int:        std::env::var("POLL_INTERVAL")
             .ok()
             .and_then(|v| v.parse().ok())
             .unwrap_or(30),
-         poll_max:     std::env::var("POLL_TIMEOUT")
+         poll_max:        std::env::var("POLL_TIMEOUT")
             .ok()
             .and_then(|v| v.parse().ok())
             .unwrap_or(3600),
@@ -397,6 +399,29 @@ fn run(cfg: Config, gerrit_cfg: gerrit::Config) -> Result<()> {
             &change.id[..8]
          );
          process_change(&cfg, &gerrit_cfg, &project_map, change);
+      }
+
+      let recheck_query = format!("hashtag:{}", cfg.recheck_hashtag);
+      match fetch_pending_changes(&gerrit_cfg, &recheck_query) {
+         Ok(rcs) => {
+            if !rcs.is_empty() {
+               eprintln!("found {} recheck request(s)", rcs.len());
+            }
+            for change in &rcs {
+               eprintln!(
+                  "recheck for change {}, re-triggering CI...",
+                  &change.id[..8]
+               );
+               process_change(&cfg, &gerrit_cfg, &project_map, change);
+               // Remove the hashtag so it doesn't re-trigger.
+               if let Err(e) =
+                  gerrit::delete_hashtags(&gerrit_cfg, &change.id, &[&cfg.recheck_hashtag])
+               {
+                  eprintln!("  WARNING: failed to remove recheck hashtag: {e}");
+               }
+            }
+         },
+         Err(e) => eprintln!("WARNING: failed to fetch recheck changes: {e}"),
       }
 
       std::thread::sleep(interval);

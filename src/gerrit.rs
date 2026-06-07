@@ -131,3 +131,11 @@ fn gerrit_err(e: ureq::Error, method: &str) -> anyhow::Error {
       e => anyhow!("Gerrit {method} failed: {e}"),
    }
 }
+
+/// Remove one or more hashtags from a change.
+pub fn delete_hashtags(cfg: &Config, change_id: &str, hashtags: &[&str]) -> Result<()> {
+   let endpoint = format!("/changes/{change_id}/hashtags/delete");
+   let body = serde_json::json!({ "hashtags": hashtags });
+   let _: serde_json::Value = post(cfg, &endpoint, &body)?;
+   Ok(())
+}
