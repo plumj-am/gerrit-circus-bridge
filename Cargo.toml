@@ -1,0 +1,16 @@
+[package]
+categories  = [ "development-tools" ]
+description = "Bridge Gerrit events to Circus CI with Verified label feedback"
+edition     = "2024"
+keywords    = [ "gerrit", "circus", "ci", "build" ]
+license     = "MIT"
+name        = "gerrit-circus-bridge"
+repository  = "https://git.plumj.am/plumjam/gerrit-circus-bridge"
+version     = "0.1.0"
+
+[dependencies]
+anyhow       = "1.0.102"
+base64       = "0.22.1"
+serde        = { features = [ "derive" ], version = "1.0.228" }
+serde_json   = "1.0.150"
+ureq         = "3.3.0"
