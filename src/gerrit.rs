@@ -95,6 +95,7 @@ pub fn post<T: serde::de::DeserializeOwned>(
       .agent
       .post(&url)
       .header("Authorization", &auth_header(&cfg.username, &cfg.password))
+      .header("Content-Type", "application/json")
       .send(json_bytes.as_slice())
       .map_err(|e| gerrit_err(e, "POST"))?;
 

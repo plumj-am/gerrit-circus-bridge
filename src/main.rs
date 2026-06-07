@@ -80,6 +80,7 @@ fn circus_post<T: serde::de::DeserializeOwned>(
    let resp = circus_agent()
       .post(&url)
       .header("Authorization", &circus_auth(cfg))
+      .header("Content-Type", "application/json")
       .send(json_bytes.as_slice())
       .map_err(|e| anyhow!("Circus POST {path}: {e}"))?;
    let body = resp.into_body().read_to_string()?;
