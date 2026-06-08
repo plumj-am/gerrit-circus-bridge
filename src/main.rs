@@ -162,13 +162,22 @@ fn resolve_jobset(
    Ok((*js).clone())
 }
 
-fn trigger_evaluation(cfg: &Config, jobset_id: &str, commit: &str) -> Result<String> {
+fn trigger_evaluation(cfg: &Config, jobset_id: &str, commit: &str) -> Result<Option<String>> {
    let body = TriggerEval {
       jobset_id:   jobset_id.to_owned(),
       commit_hash: commit.to_owned(),
    };
-   let resp: serde_json::Value =
-      circus_post(cfg, "/evaluations/trigger", &body).context("failed to trigger evaluation")?;
+   let resp: serde_json::Value = match circus_post(cfg, "/evaluations/trigger", &body) {
+      Ok(v) => v,
+      Err(e) => {
+         // 409 = evaluation already exists (same commit/jobset) - expected on rechecks
+         if format!("{e:#}").contains("409") {
+            eprintln!("  evaluation already exists for commit {}", &commit[..8]);
+            return Ok(None);
+         }
+         return Err(e).context("failed to trigger evaluation");
+      },
+   };
    let eval_id = resp
       .get("id")
       .and_then(|v| v.as_str())
@@ -178,7 +187,7 @@ fn trigger_evaluation(cfg: &Config, jobset_id: &str, commit: &str) -> Result<Str
       &eval_id[..8],
       &commit[..8]
    );
-   Ok(eval_id.to_owned())
+   Ok(Some(eval_id.to_owned()))
 }
 
 fn poll_builds(cfg: &Config, eval_id: &str, deadline: std::time::Instant) -> Result<String> {
@@ -319,7 +328,11 @@ fn process_change(
 
    // Trigger eval.
    let eval_id = match trigger_evaluation(cfg, &js.id, rev) {
-      Ok(id) => id,
+      Ok(Some(id)) => id,
+      Ok(None) => {
+         eprintln!("  evaluation already in progress - skipping poll");
+         return;
+      },
       Err(e) => {
          eprintln!("  ERROR: {e:#}");
          return;

@@ -104,6 +104,28 @@ pub fn post<T: serde::de::DeserializeOwned>(
    serde_json::from_str(stripped).context("failed to parse Gerrit POST response")
 }
 
+/// PUT a JSON body to a Gerrit endpoint.
+pub fn put<T: serde::de::DeserializeOwned>(
+   cfg: &Config,
+   endpoint: &str,
+   body: &impl serde::Serialize,
+) -> Result<T> {
+   let url = format!("{}/a{}", base_url(cfg), endpoint);
+   let json_bytes = serde_json::to_vec(body).context("failed to serialise PUT body")?;
+
+   let resp = cfg
+      .agent
+      .put(&url)
+      .header("Authorization", &auth_header(&cfg.username, &cfg.password))
+      .header("Content-Type", "application/json")
+      .send(json_bytes.as_slice())
+      .map_err(|e| gerrit_err(e, "PUT"))?;
+
+   let body = resp.into_body().read_to_string()?;
+   let stripped = body.strip_prefix(GERRIT_RESPONSE_PREFIX).unwrap_or(&body);
+   serde_json::from_str(stripped).context("failed to parse Gerrit PUT response")
+}
+
 /// Set the `Verified` label on a change/revision.
 ///
 /// `verified` — `1` (pass), `-1` (fail), `0` (neutral / running).
@@ -133,9 +155,10 @@ fn gerrit_err(e: ureq::Error, method: &str) -> anyhow::Error {
 }
 
 /// Remove one or more hashtags from a change.
+/// Gerrit API: `PUT /changes/{id}/hashtags` with `{"remove": [...]}`.
 pub fn delete_hashtags(cfg: &Config, change_id: &str, hashtags: &[&str]) -> Result<()> {
-   let endpoint = format!("/changes/{change_id}/hashtags/delete");
-   let body = serde_json::json!({ "hashtags": hashtags });
-   let _: serde_json::Value = post(cfg, &endpoint, &body)?;
+   let endpoint = format!("/changes/{change_id}/hashtags");
+   let body = serde_json::json!({ "remove": hashtags });
+   let _: serde_json::Value = put(cfg, &endpoint, &body)?;
    Ok(())
 }
