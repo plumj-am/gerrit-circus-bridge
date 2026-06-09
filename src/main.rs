@@ -207,6 +207,13 @@ fn poll_builds(cfg: &Config, eval_id: &str, deadline: std::time::Instant) -> Res
          serde_json::from_value(raw)?
       };
 
+      // No builds yet - evaluation is still being scheduled so we keep polling.
+      if builds.is_empty() {
+         eprintln!("  no builds yet, waiting...");
+         std::thread::sleep(interval);
+         continue;
+      }
+
       let running = builds
          .iter()
          .filter(|b| b.status == "running" || b.status == "pending")
